@@ -25,9 +25,9 @@ SOFTWARE.
 (function() {
 	angular.module('gm.datepickerMultiSelect', ['ui.bootstrap'])
 	.config(['$provide', function($provide) {
-		$provide.decorator('daypickerDirective', ['$delegate', function($delegate) {
+		$provide.decorator('daypickerDirective', ['$delegate', '$datepickerSuppressError', function($delegate, $datepickerSuppressError) {
 			var directive = $delegate[0];
-
+			var ngModelCtrl = { $setViewValue: angular.noop }; // nullModelCtrl;
 			/* Override compile */
 			var link = directive.link;
 
@@ -38,8 +38,9 @@ SOFTWARE.
 					var selectedDates = [];
 
 					/* Called when multiSelect model is updated */
-					scope.$on('update', function(event, newDates) {
+					scope.$on('update', function(event, newDates, ngModelCtrl_) {
 						selectedDates = newDates;
+						ngModelCtrl = ngModelCtrl_;
 						update();
 					});
 
@@ -57,7 +58,21 @@ SOFTWARE.
 								day.selected = selectedDates.indexOf(day.date.setHours(0, 0, 0, 0)) > -1
 							});
 						});
-					}
+					}          
+          
+					/* Override the parent render method to avoid multiple calendars switching dates. */
+					ctrl.render = function() {
+						if ( ngModelCtrl.$viewValue ) {
+							var date = new Date( ngModelCtrl.$viewValue ),
+								isValid = !isNaN(date);
+							if ( isValid ) {
+								//ctrl.activeDate = date;
+							} else if ( !$datepickerSuppressError ) {
+								$log.error('Datepicker directive: "ng-model" value must be a Date object, a number of milliseconds since 01.01.1970 or a string representing an RFC2822 or ISO 8601 date.');
+							}
+						}
+						ctrl.refreshView();
+					};          
 				}
 			}
 
@@ -69,16 +84,17 @@ SOFTWARE.
 			require: ['ngModel'],
 			link: function(scope, elem, attrs, ctrls) {
 				var selectedDates;
+				var ngModelCtrl = ctrls[0];
 				var selectRange;
-
+        
 				/* Called when directive is compiled */
 				scope.$on('requestSelectedDates', function() {
-					scope.$broadcast('update', selectedDates);
+					scope.$broadcast('update', selectedDates, ngModelCtrl);
 				});
 
 				scope.$watchCollection(attrs.multiSelect, function(newVal) {
 					selectedDates = newVal || [];
-					scope.$broadcast('update', selectedDates);
+					scope.$broadcast('update', selectedDates, ngModelCtrl);
 				});
 
 				attrs.$observe('selectRange', function(newVal) {
